@@ -55,13 +55,11 @@ class SharedMLP(nn.Module):
 
 
 class LocalSpatialEncoding(nn.Module):
-    def __init__(self, d, num_neighbors, device):
+    def __init__(self, d, num_neighbors):
         super(LocalSpatialEncoding, self).__init__()
 
         self.num_neighbors = num_neighbors
         self.mlp = SharedMLP(10, d, bn=True, activation_fn=nn.ReLU())
-
-        self.device = device
 
     def forward(self, coords, features, knn_output):
         r"""
@@ -96,7 +94,7 @@ class LocalSpatialEncoding(nn.Module):
             neighbors,
             extended_coords - neighbors,
             dist.unsqueeze(-3)
-        ), dim=-3).to(self.device)
+        ), dim=-3)
         return torch.cat((
             self.mlp(concat),
             features.expand(B, -1, N, K)
@@ -137,7 +135,7 @@ class AttentivePooling(nn.Module):
 
 
 class LocalFeatureAggregation(nn.Module):
-    def __init__(self, d_in, d_out, num_neighbors, device):
+    def __init__(self, d_in, d_out, num_neighbors):
         super(LocalFeatureAggregation, self).__init__()
 
         self.num_neighbors = num_neighbors
@@ -146,8 +144,8 @@ class LocalFeatureAggregation(nn.Module):
         self.mlp2 = SharedMLP(d_out, 2*d_out)
         self.shortcut = SharedMLP(d_in, 2*d_out, bn=True)
 
-        self.lse1 = LocalSpatialEncoding(d_out//2, num_neighbors, device)
-        self.lse2 = LocalSpatialEncoding(d_out//2, num_neighbors, device)
+        self.lse1 = LocalSpatialEncoding(d_out//2, num_neighbors)
+        self.lse2 = LocalSpatialEncoding(d_out//2, num_neighbors)
 
         self.pool1 = AttentivePooling(d_out, d_out//2)
         self.pool2 = AttentivePooling(d_out, d_out)
@@ -184,9 +182,8 @@ class LocalFeatureAggregation(nn.Module):
 
 
 class RandLANet(nn.Module):
-    def __init__(self, d_in, num_classes, num_neighbors=16, decimation=4, device=torch.device('cpu')):
+    def __init__(self, d_in, num_classes, num_neighbors=16, decimation=4):
         super(RandLANet, self).__init__()
-        # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_neighbors = num_neighbors
         self.decimation = decimation
 
@@ -198,10 +195,10 @@ class RandLANet(nn.Module):
 
         # encoding layers
         self.encoder = nn.ModuleList([
-            LocalFeatureAggregation(8, 16, num_neighbors, device),
-            LocalFeatureAggregation(32, 64, num_neighbors, device),
-            LocalFeatureAggregation(128, 128, num_neighbors, device),
-            LocalFeatureAggregation(256, 256, num_neighbors, device)
+            LocalFeatureAggregation(8, 16, num_neighbors),
+            LocalFeatureAggregation(32, 64, num_neighbors),
+            LocalFeatureAggregation(128, 128, num_neighbors),
+            LocalFeatureAggregation(256, 256, num_neighbors)
         ])
 
         self.mlp = SharedMLP(512, 512, activation_fn=nn.ReLU())
@@ -226,9 +223,6 @@ class RandLANet(nn.Module):
             nn.Dropout(),
             SharedMLP(32, num_classes)
         )
-        self.device = device
-
-        self = self.to(device)
 
     def forward(self, input):
         r"""
@@ -279,7 +273,6 @@ class RandLANet(nn.Module):
                 coords[:,:d*N//decimation_ratio].cpu().contiguous(), # upsampled set
                 1
             ) # shape (B, N, 1)
-            neighbors = neighbors.to(self.device)
 
             extended_neighbors = neighbors.unsqueeze(1).expand(-1, x.size(1), -1, 1)
 
