@@ -1,21 +1,23 @@
-import pickle, time, warnings
-import numpy as np
-
 import torch
 from torch.utils.data import Dataset, IterableDataset, DataLoader, Sampler, BatchSampler
+
+from pathlib import Path
+from plyfile import PlyData
+import pickle, time, warnings
+import numpy as np
 
 from utils.tools import Config as cfg
 from utils.tools import DataProcessing as DP
 
 class PointCloudsDataset(Dataset):
     def __init__(self, dir, labels_available=True):
-        self.paths = list(dir.glob(f'*.npy'))
+        self.paths = list(dir.glob(f'*.ply'))
         self.labels_available = labels_available
 
     def __getitem__(self, idx):
         path = self.paths[idx]
 
-        points, labels = self.load_npy(path)
+        points, labels = self.load_ply(path)
 
         points_tensor = torch.from_numpy(points).float()
         labels_tensor = torch.from_numpy(labels).long()
@@ -58,6 +60,42 @@ class PointCloudsDataset(Dataset):
                 labels = labels[labeled]
 
         return points, labels
+    def load_ply(self, path):
+        r"""
+            load the point cloud and labels of the npy file located in path
+
+            Args:
+                path: str
+                    path of the point cloud
+                keep_zeros: bool (optional)
+                    keep unclassified points
+        """
+        with open(path, 'rb') as f:
+            plydata = PlyData.read(f)
+        plydata = plydata['vertex'].data
+        cloud_ply = np.array(plydata)
+        points = cloud_ply[:,:-1] if self.labels_available else points
+
+        if self.labels_available:
+            labels = cloud_ply[:,-1]
+
+            # balance training set
+            points_list, labels_list = [], []
+            for i in range(len(np.unique(labels))):
+                try:
+                    idx = np.random.choice(len(labels[labels==i]), 8000)
+                    points_list.append(points[labels==i][idx])
+                    labels_list.append(labels[labels==i][idx])
+                except ValueError:
+                    continue
+            if points_list:
+                points = np.stack(points_list)
+                labels = np.stack(labels_list)
+                labeled = labels>0
+                points = points[labeled]
+                labels = labels[labeled]
+
+        return points, labels
 
 class CloudsDataset(Dataset):
     def __init__(self, dir, data_type='npy'):
@@ -71,7 +109,7 @@ class CloudsDataset(Dataset):
         self.input_names = {'training': [], 'validation': []}
         self.val_proj = []
         self.val_labels = []
-        self.val_split = '1_'
+        self.val_split = 'untermaederbrunnen_station3_xyz_intensity_rgb'
 
         self.load_data()
         print('Size of training : ', len(self.input_colors['training']))
@@ -88,13 +126,22 @@ class CloudsDataset(Dataset):
 
             # Name of the input files
             kd_tree_file = self.path / '{:s}_KDTree.pkl'.format(cloud_name)
-            sub_npy_file = self.path / '{:s}.npy'.format(cloud_name)
-
-            data = np.load(sub_npy_file, mmap_mode='r').T
-
+            if self.data_type == 'npy':
+                sub_file = self.path / '{:s}.npy'.format(cloud_name)
+                data = np.load(sub_file, mmap_mode='r').T
+            elif self.data_type == 'ply':
+                sub_file = self.path / '{:s}.ply'.format(cloud_name)
+                with open(sub_file, 'rb') as f:
+                    plydata = PlyData.read(f)
+                plydata = plydata['vertex'].data.copy()
+                data = np.array(plydata, dtype = 'float32')
+            else:
+                raise Exception("Invalid data_type!")
             sub_colors = data[:,3:6]
             sub_labels = data[:,-1].copy()
-
+            sub_labels = sub_labels.astype(np.int32)
+            sum0 = sum(sub_labels==0)
+            sum8 = sum(sub_labels==8)
             # Read pkl with search tree
             with open(kd_tree_file, 'rb') as f:
                 search_tree = pickle.load(f)
@@ -229,7 +276,7 @@ class ActiveLearningSampler(IterableDataset):
 
 def data_loaders(dir, sampling_method='active_learning', **kwargs):
     if sampling_method == 'active_learning':
-        dataset = CloudsDataset(dir / 'train')
+        dataset = CloudsDataset(dir)
         batch_size = kwargs.get('batch_size', 6)
         val_sampler = ActiveLearningSampler(
             dataset,
@@ -251,7 +298,7 @@ def data_loaders(dir, sampling_method='active_learning', **kwargs):
     raise ValueError(f"Dataset sampling method '{sampling_method}' does not exist.")
 
 if __name__ == '__main__':
-    dataset = CloudsDataset('datasets/s3dis/subsampled/train')
+    dataset = CloudsDataset(Path('/share/dataset/sqn_own/semantic3d/train'))
     batch_sampler = ActiveLearningSampler(dataset)
     for data in batch_sampler:
         xyz, colors, labels, idx, cloud_idx = data

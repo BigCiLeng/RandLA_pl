@@ -167,7 +167,7 @@ class LocalFeatureAggregation(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d_out, N, 1)
         """
-        knn_output = knn(coords.cpu().contiguous(), coords.cpu().contiguous(), self.num_neighbors)
+        knn_output = knn(coords.contiguous(), coords.contiguous(), self.num_neighbors)
 
         x = self.mlp1(features)
 
@@ -241,7 +241,7 @@ class RandLANet(nn.Module):
         N = input.size(1)
         d = self.decimation
 
-        coords = input[...,:3].clone().cpu()
+        coords = input[...,:3].clone()
         x = self.fc_start(input).transpose(-2,-1).unsqueeze(-1)
         x = self.bn_start(x) # shape (B, d, N, 1)
 
@@ -269,8 +269,8 @@ class RandLANet(nn.Module):
         # <<<<<<<<<< DECODER
         for mlp in self.decoder:
             neighbors, _ = knn(
-                coords[:,:N//decimation_ratio].cpu().contiguous(), # original set
-                coords[:,:d*N//decimation_ratio].cpu().contiguous(), # upsampled set
+                coords[:,:N//decimation_ratio].contiguous(), # original set
+                coords[:,:d*N//decimation_ratio].contiguous(), # upsampled set
                 1
             ) # shape (B, N, 1)
 
