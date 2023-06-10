@@ -6,96 +6,96 @@ from plyfile import PlyData
 import pickle, time, warnings
 import numpy as np
 
-from utils.tools import Config as cfg
+# from utils.tools import Config as cfg
 from utils.tools import DataProcessing as DP
 
-class PointCloudsDataset(Dataset):
-    def __init__(self, dir, labels_available=True):
-        self.paths = list(dir.glob(f'*.ply'))
-        self.labels_available = labels_available
+# class PointCloudsDataset(Dataset):
+#     def __init__(self, dir, labels_available=True):
+#         self.paths = list(dir.glob(f'*.ply'))
+#         self.labels_available = labels_available
 
-    def __getitem__(self, idx):
-        path = self.paths[idx]
+#     def __getitem__(self, idx):
+#         path = self.paths[idx]
 
-        points, labels = self.load_ply(path)
+#         points, labels = self.load_ply(path)
 
-        points_tensor = torch.from_numpy(points).float()
-        labels_tensor = torch.from_numpy(labels).long()
+#         points_tensor = torch.from_numpy(points).float()
+#         labels_tensor = torch.from_numpy(labels).long()
 
-        return points_tensor, labels_tensor
+#         return points_tensor, labels_tensor
 
-    def __len__(self):
-        return len(self.paths)
+#     def __len__(self):
+#         return len(self.paths)
 
-    def load_npy(self, path):
-        r"""
-            load the point cloud and labels of the npy file located in path
+#     def load_npy(self, path):
+#         r"""
+#             load the point cloud and labels of the npy file located in path
 
-            Args:
-                path: str
-                    path of the point cloud
-                keep_zeros: bool (optional)
-                    keep unclassified points
-        """
-        cloud_npy = np.load(path, mmap_mode='r').T
-        points = cloud_npy[:,:-1] if self.labels_available else points
+#             Args:
+#                 path: str
+#                     path of the point cloud
+#                 keep_zeros: bool (optional)
+#                     keep unclassified points
+#         """
+#         cloud_npy = np.load(path, mmap_mode='r').T
+#         points = cloud_npy[:,:-1] if self.labels_available else points
 
-        if self.labels_available:
-            labels = cloud_npy[:,-1]
+#         if self.labels_available:
+#             labels = cloud_npy[:,-1]
 
-            # balance training set
-            points_list, labels_list = [], []
-            for i in range(len(np.unique(labels))):
-                try:
-                    idx = np.random.choice(len(labels[labels==i]), 8000)
-                    points_list.append(points[labels==i][idx])
-                    labels_list.append(labels[labels==i][idx])
-                except ValueError:
-                    continue
-            if points_list:
-                points = np.stack(points_list)
-                labels = np.stack(labels_list)
-                labeled = labels>0
-                points = points[labeled]
-                labels = labels[labeled]
+#             # balance training set
+#             points_list, labels_list = [], []
+#             for i in range(len(np.unique(labels))):
+#                 try:
+#                     idx = np.random.choice(len(labels[labels==i]), 8000)
+#                     points_list.append(points[labels==i][idx])
+#                     labels_list.append(labels[labels==i][idx])
+#                 except ValueError:
+#                     continue
+#             if points_list:
+#                 points = np.stack(points_list)
+#                 labels = np.stack(labels_list)
+#                 labeled = labels>0
+#                 points = points[labeled]
+#                 labels = labels[labeled]
 
-        return points, labels
-    def load_ply(self, path):
-        r"""
-            load the point cloud and labels of the npy file located in path
+#         return points, labels
+#     def load_ply(self, path):
+#         r"""
+#             load the point cloud and labels of the npy file located in path
 
-            Args:
-                path: str
-                    path of the point cloud
-                keep_zeros: bool (optional)
-                    keep unclassified points
-        """
-        with open(path, 'rb') as f:
-            plydata = PlyData.read(f)
-        plydata = plydata['vertex'].data
-        cloud_ply = np.array(plydata)
-        points = cloud_ply[:,:-1] if self.labels_available else points
+#             Args:
+#                 path: str
+#                     path of the point cloud
+#                 keep_zeros: bool (optional)
+#                     keep unclassified points
+#         """
+#         with open(path, 'rb') as f:
+#             plydata = PlyData.read(f)
+#         plydata = plydata['vertex'].data
+#         cloud_ply = np.array(plydata)
+#         points = cloud_ply[:,:-1] if self.labels_available else points
 
-        if self.labels_available:
-            labels = cloud_ply[:,-1]
+#         if self.labels_available:
+#             labels = cloud_ply[:,-1]
 
-            # balance training set
-            points_list, labels_list = [], []
-            for i in range(len(np.unique(labels))):
-                try:
-                    idx = np.random.choice(len(labels[labels==i]), 8000)
-                    points_list.append(points[labels==i][idx])
-                    labels_list.append(labels[labels==i][idx])
-                except ValueError:
-                    continue
-            if points_list:
-                points = np.stack(points_list)
-                labels = np.stack(labels_list)
-                labeled = labels>0
-                points = points[labeled]
-                labels = labels[labeled]
+#             # balance training set
+#             points_list, labels_list = [], []
+#             for i in range(len(np.unique(labels))):
+#                 try:
+#                     idx = np.random.choice(len(labels[labels==i]), 8000)
+#                     points_list.append(points[labels==i][idx])
+#                     labels_list.append(labels[labels==i][idx])
+#                 except ValueError:
+#                     continue
+#             if points_list:
+#                 points = np.stack(points_list)
+#                 labels = np.stack(labels_list)
+#                 labeled = labels>0
+#                 points = points[labeled]
+#                 labels = labels[labeled]
 
-        return points, labels
+#         return points, labels
 
 class CloudsDataset(Dataset):
     def __init__(self, dir, data_type='npy'):
@@ -183,17 +183,17 @@ class CloudsDataset(Dataset):
 
 class ActiveLearningSampler(IterableDataset):
 
-    def __init__(self, dataset, batch_size=6, split='training'):
+    def __init__(self, dataset, batch_size=6, split='training', hparams=None):
         self.dataset = dataset
         self.split = split
         self.batch_size = batch_size
         self.possibility = {}
         self.min_possibility = {}
-
+        self.hparams = hparams
         if split == 'training':
-            self.n_samples = cfg.train_steps
+            self.n_samples = self.hparams.train_steps
         else:
-            self.n_samples = cfg.val_steps
+            self.n_samples = self.hparams.val_steps
 
         #Random initialisation for weights
         self.possibility[split] = []
@@ -213,7 +213,7 @@ class ActiveLearningSampler(IterableDataset):
 
         for i in range(self.n_samples * self.batch_size):  # num_per_epoch
             # t0 = time.time()
-            if cfg.sampling_type=='active_learning':
+            if self.hparams.dataset_sampling=='active_learning':
                 # Generator loop
 
                 # Choose a random cloud
@@ -232,10 +232,10 @@ class ActiveLearningSampler(IterableDataset):
                 noise = np.random.normal(scale=3.5 / 10, size=center_point.shape)
                 pick_point = center_point + noise.astype(center_point.dtype)
 
-                if len(points) < cfg.num_points:
+                if len(points) < self.hparams.num_points:
                     queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=len(points))[1][0]
                 else:
-                    queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=cfg.num_points)[1][0]
+                    queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=self.hparams.num_points)[1][0]
 
                 queried_idx = DP.shuffle_idx(queried_idx)
                 # Collect points and colors
@@ -249,16 +249,16 @@ class ActiveLearningSampler(IterableDataset):
                 self.possibility[self.split][cloud_idx][queried_idx] += delta
                 self.min_possibility[self.split][cloud_idx] = float(np.min(self.possibility[self.split][cloud_idx]))
 
-                if len(points) < cfg.num_points:
+                if len(points) < self.hparams.num_points:
                     queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
-                        DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
+                        DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, self.hparams.num_points)
 
             # Simple random choice of cloud and points in it
-            elif cfg.sampling_type=='random':
+            elif self.hparams.dataset_sampling=='random':
 
                 cloud_idx = np.random.choice(len(self.min_possibility[self.split]), 1)[0]
                 points = np.array(self.dataset.input_trees[self.split][cloud_idx].data, copy=False)
-                queried_idx = np.random.choice(len(self.dataset.input_trees[self.split][cloud_idx].data), cfg.num_points)
+                queried_idx = np.random.choice(len(self.dataset.input_trees[self.split][cloud_idx].data), self.hparams.num_points)
                 queried_pc_xyz = points[queried_idx]
                 queried_pc_colors = self.dataset.input_colors[self.split][cloud_idx][queried_idx]
                 queried_pc_labels = self.dataset.input_labels[self.split][cloud_idx][queried_idx]
@@ -274,28 +274,30 @@ class ActiveLearningSampler(IterableDataset):
             yield points, queried_pc_labels
 
 
-def data_loaders(dir, sampling_method='active_learning', **kwargs):
-    if sampling_method == 'active_learning':
-        dataset = CloudsDataset(dir)
-        batch_size = kwargs.get('batch_size', 6)
-        val_sampler = ActiveLearningSampler(
-            dataset,
-            batch_size=batch_size,
-            split='validation'
-        )
-        train_sampler = ActiveLearningSampler(
-            dataset,
-            batch_size=batch_size,
-            split='training'
-        )
-        return DataLoader(train_sampler, **kwargs), DataLoader(val_sampler, **kwargs)
+def data_loaders(dir, hparams, sampling_method='active_learning', **kwargs):
+    dataset = CloudsDataset(dir)
+    batch_size = kwargs.get('batch_size', 6)
+    hparams = hparams
+    val_sampler = ActiveLearningSampler(
+        dataset,
+        batch_size=batch_size,
+        split='validation',
+        hparams=hparams
+    )
+    train_sampler = ActiveLearningSampler(
+        dataset,
+        batch_size=batch_size,
+        split='training',
+        hparams=hparams
+    )
+    return DataLoader(train_sampler, **kwargs), DataLoader(val_sampler, **kwargs)
 
-    if sampling_method == 'naive':
-        train_dataset = PointCloudsDataset(dir / 'train')
-        val_dataset = PointCloudsDataset(dir / 'val')
-        return DataLoader(train_dataset, shuffle=True, **kwargs), DataLoader(val_dataset, **kwargs)
+    # if sampling_method == 'naive':
+    #     train_dataset = PointCloudsDataset(dir)
+    #     val_dataset = PointCloudsDataset(dir / 'val')
+    #     return DataLoader(train_dataset, shuffle=True, **kwargs), DataLoader(val_dataset, **kwargs)
 
-    raise ValueError(f"Dataset sampling method '{sampling_method}' does not exist.")
+    # raise ValueError(f"Dataset sampling method '{sampling_method}' does not exist.")
 
 if __name__ == '__main__':
     dataset = CloudsDataset(Path('/share/dataset/sqn_own/semantic3d/train'))

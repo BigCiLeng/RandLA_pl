@@ -71,6 +71,7 @@ class RandLA_System(pl.LightningModule):
         if self.hparams['hparams'].work_type == 'train':
             self.train_loader, self.val_loader = data_loaders(
                 Path(os.path.join(self.hparams['hparams'].dataset, self.hparams['hparams'].train_dir)),
+                self.hparams['hparams'],
                 self.hparams['hparams'].dataset_sampling,
                 batch_size=self.hparams['hparams'].batch_size,
                 num_workers=self.hparams['hparams'].num_workers,
@@ -87,7 +88,8 @@ class RandLA_System(pl.LightningModule):
         elif self.hparams['hparams'].work_type == 'test':
             print('Loading data...')
             self.test_loader, _ = data_loaders(
-                Path(os.path.join(self.hparams['hparams'].dataset,self.hparams['hparams'].test_dir)),                
+                Path(os.path.join(self.hparams['hparams'].dataset,self.hparams['hparams'].test_dir)),   
+                self.hparams['hparams'],             
                 self.hparams['hparams'].dataset_sampling,
                 batch_size=self.hparams['hparams'].batch_size,
                 num_workers=self.hparams['hparams'].num_workers,
@@ -121,33 +123,32 @@ class RandLA_System(pl.LightningModule):
         acc = accuracy(scores, labels)
         iou = intersection_over_union(scores, labels)
 
-        log= {'lr': self.get_lr(self.optimizer), 'train/loss': loss, 'train/accuracy': acc, 'train/iou': iou}
+        acc_mean = torch.tensor(acc).mean()
+        iou_mean = torch.tensor(iou).mean()
 
-        preds = {'loss': loss, 'accuracy': accuracy,'iou': iou, 'log': log}
+        log= {'lr': self.get_lr(self.optimizer), 'train/loss': loss, 'train/accuracy': acc_mean, 'train/iou': iou_mean}
+
+        preds = {'loss': loss, 'accuracy': acc_mean,'iou': iou_mean, 'log': log}
 
         self.log('train/loss', loss.clone().detach(), sync_dist=True)
-        for i, acc_ in enumerate(acc):
-            self.log('train/accuracy_{}'.format(i), acc_, sync_dist=True)
-        for i, iou_ in enumerate(iou):
-            self.log('train/iou_{}'.format(i), iou_, sync_dist=True)
+        self.log('train/accuracy', acc_mean.clone().detach(), sync_dist=True)
+        self.log('train/iou', iou_mean.clone().detach(), sync_dist=True)
         self.training_step_outputs.append(preds)
 
         return loss
 
     def on_training_epoch_end(self):
         outputs = self.training_step_outputs
-        loss = torch.stack([torch.tensor(x['loss']) for x in outputs])
-        acc = torch.stack([torch.tensor(x['accuracy']) for x in outputs])
-        iou = torch.stack([torch.tensor(x['iou']) for x in outputs])
+        loss = torch.stack([x['loss'] for x in outputs])
+        acc = torch.stack([x['accuracy'] for x in outputs])
+        iou = torch.stack([x['iou'] for x in outputs])
 
         mean_loss = torch.mean(loss)
-        mean_accuracy = torch.mean(acc, dim=0)
-        mean_iou = torch.mean(iou, dim=0)
+        mean_accuracy = torch.mean(acc)
+        mean_iou = torch.mean(iou)
         self.log('mean_train_loss', mean_loss.clone().detach(), sync_dist=True)
-        for i, acc_ in enumerate(mean_accuracy):
-            self.log('mean_train_accuracy_{}'.format(i), acc_, sync_dist=True)
-        for i, iou_ in enumerate(mean_iou):
-            self.log('mean_train_iou_{}'.format(i), iou_, sync_dist=True)
+        self.log('mean_train_accuracy', mean_accuracy.clone().detach(), sync_dist=True)
+        self.log('mean_train_iou', mean_iou.clone().detach(), sync_dist=True)
         self.training_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx):
@@ -161,28 +162,29 @@ class RandLA_System(pl.LightningModule):
         acc = accuracy(scores, labels)
         iou = intersection_over_union(scores, labels)
 
-        log = {'val/loss': loss, 'val/accuracy': acc, 'val/iou': iou}
-        pred = {'loss': loss, 'accuracy': acc,'iou': iou, 'log': log}
+        acc_mean = torch.tensor(acc).mean()
+        iou_mean = torch.tensor(iou).mean()
+
+        log = {'val/loss': loss, 'val/accuracy': acc_mean, 'val/iou': iou_mean}
+        pred = {'loss': loss, 'accuracy': acc_mean,'iou': iou_mean, 'log': log}
         self.validation_step_outputs.append(pred)
 
         return pred
 
     def on_validation_epoch_end(self):
         outputs = self.validation_step_outputs
-        loss = torch.stack([torch.tensor(x['loss']) for x in outputs])
-        acc = torch.stack([torch.tensor(x['accuracy']) for x in outputs])
-        iou = torch.stack([torch.tensor(x['iou']) for x in outputs])
+        loss = torch.stack([x['loss'] for x in outputs])
+        acc = torch.stack([x['accuracy'] for x in outputs])
+        iou = torch.stack([x['iou'] for x in outputs])
 
 
         mean_loss = torch.mean(loss)
-        mean_accuracy = torch.mean(acc, dim=0)
-        mean_iou = torch.mean(iou, dim=0)
+        mean_accuracy = torch.mean(acc)
+        mean_iou = torch.mean(iou)
 
         self.log('mean_val_loss', mean_loss.clone().detach(), sync_dist=True)
-        for i, acc_ in enumerate(mean_accuracy):
-            self.log('mean_val_accuracy_{}'.format(i), acc_, sync_dist=True)
-        for i, iou_ in enumerate(mean_iou):
-            self.log('mean_val_iou_{}'.format(i), iou_, sync_dist=True)
+        self.log('mean_val_accuracy', mean_accuracy.clone().detach(), sync_dist=True)
+        self.log('mean_val_iou', mean_iou.clone().detach(), sync_dist=True)
         self.validation_step_outputs.clear()
     def test_step(self, batch, batch_nb):
         points, labels = self.decode_batch(batch)
@@ -213,13 +215,14 @@ def train(args):
                          logger=wandb_logger,
                          max_epochs=args.epochs,
                          callbacks=[checkpoint] if checkpoint is not None else None,
-                         accelerator='gpu',
+                         accelerator=args.device,
                          devices=args.gpu,
                          strategy=DDPStrategy(find_unused_parameters=False),
                          check_val_every_n_epoch=5,
                          num_sanity_val_steps=1,
                          benchmark=True,
-                         log_every_n_steps=1)
+                         log_every_n_steps=1,
+                         )
     trainer.fit(system)
 
 def test(args):
@@ -252,15 +255,19 @@ if __name__ == '__main__':
                         default=50)
     expr.add_argument('--load', type=str, help='model to load',
                         default='')
+    expr.add_argument('--num_points', type=int, help='Number of input points', default=40960)
+    expr.add_argument('--sub_grid_size', type=float, help='preprocess_parameter', default=0.06)
+    expr.add_argument('--train_steps', type=int, help='Number of steps per epochs', default=200)
+    expr.add_argument('--val_steps', type=int, help='Number of validation steps per epoch', default=100)
 
     param.add_argument('--adam_lr', type=float, help='learning rate of the optimizer',
                         default=1e-2)
     param.add_argument('--batch_size', type=int, help='batch size',
-                        default=10)
+                        default=5)
     param.add_argument('--decimation', type=int, help='ratio the point cloud is divided by at each layer',
                         default=4)
     param.add_argument('--dataset_sampling', type=str, help='how dataset is sampled',
-                        default='active_learning', choices=['active_learning', 'naive'])
+                        default='active_learning', choices=['active_learning', 'random'])
     param.add_argument('--neighbors', type=int, help='number of neighbors considered by k-NN',
                         default=16)
     param.add_argument('--scheduler_gamma', type=float, help='gamma of the learning rate scheduler',
@@ -274,15 +281,16 @@ if __name__ == '__main__':
                         default='val')
     dirs.add_argument('--logs_dir', type=Path, help='path to tensorboard logs',
                         default='runs')
-
+    misc.add_argument('--device', type=str, help='cpu/gpu',
+                        default='gpu')
     misc.add_argument('--gpu', type=int, help='which GPU to use (-1 for CPU)',
-                        default=-1)
+                        default=2)
     misc.add_argument('--name', type=str, help='name of the experiment',
                         default=None)
     misc.add_argument('--num_workers', type=int, help='number of threads for loading data',
                         default=4)
-    misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
-                        default=10)
+    # misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
+    #                     default=10)
 
     args = parser.parse_args()
 

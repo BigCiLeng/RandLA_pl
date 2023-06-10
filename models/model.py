@@ -3,10 +3,10 @@ import time
 import torch
 import torch.nn as nn
 
-try:
-    from torch_points import knn
-except (ModuleNotFoundError, ImportError):
-    from torch_points_kernels import knn
+# try:
+#     from torch_points import knn
+# except (ModuleNotFoundError, ImportError):
+from torch_points_kernels import knn
 
 class SharedMLP(nn.Module):
     def __init__(
@@ -84,11 +84,13 @@ class LocalSpatialEncoding(nn.Module):
         # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = extended_coords[b, i, extended_idx[b, i, n, k], k]
         extended_idx = idx.unsqueeze(1).expand(B, 3, N, K)
         extended_coords = coords.transpose(-2,-1).unsqueeze(-1).expand(B, 3, N, K)
-        neighbors = torch.gather(extended_coords, 2, extended_idx) # shape (B, 3, N, K)
+        neighbors = torch.gather(extended_coords.cpu(), 2, extended_idx) # shape (B, 3, N, K)
         # if USE_CUDA:
         #     neighbors = neighbors.cuda()
 
         # relative point position encoding
+        neighbors = neighbors.to(extended_coords)
+        dist = dist.to(extended_coords)
         concat = torch.cat((
             extended_coords,
             neighbors,
@@ -167,7 +169,7 @@ class LocalFeatureAggregation(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d_out, N, 1)
         """
-        knn_output = knn(coords.contiguous(), coords.contiguous(), self.num_neighbors)
+        knn_output = knn(coords.cpu().contiguous(), coords.cpu().contiguous(), self.num_neighbors)
 
         x = self.mlp1(features)
 
@@ -269,16 +271,18 @@ class RandLANet(nn.Module):
         # <<<<<<<<<< DECODER
         for mlp in self.decoder:
             neighbors, _ = knn(
-                coords[:,:N//decimation_ratio].contiguous(), # original set
-                coords[:,:d*N//decimation_ratio].contiguous(), # upsampled set
+                coords[:,:N//decimation_ratio].cpu().contiguous(), # original set
+                coords[:,:d*N//decimation_ratio].cpu().contiguous(), # upsampled set
                 1
             ) # shape (B, N, 1)
 
             extended_neighbors = neighbors.unsqueeze(1).expand(-1, x.size(1), -1, 1)
 
-            x_neighbors = torch.gather(x, -2, extended_neighbors)
+            x_neighbors = torch.gather(x.cpu(), -2, extended_neighbors)
 
-            x = torch.cat((x_neighbors, x_stack.pop()), dim=1)
+            temp = x_stack.pop()
+            x_neighbors = x_neighbors.to(temp)
+            x = torch.cat((x_neighbors, temp), dim=1)
 
             x = mlp(x)
 

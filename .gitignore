@@ -1,3 +1,6 @@
 lightning_logs/*
 *.pyc
 wandb/*
+utils/cpp*
+utils/nearest_neighbors/*
+*.ckpt
