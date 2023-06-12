@@ -209,7 +209,7 @@ def train(args):
                                     save_top_k=5,
                                     )
         
-    wandb_logger = WandbLogger(project="RandLA")
+    wandb_logger = WandbLogger(project="RandLA", name=args.name)
     system = RandLA_System(hparams=args)
     trainer = pl.Trainer(
                          logger=wandb_logger,
@@ -300,7 +300,7 @@ if __name__ == '__main__':
             args.name = args.load
         else:
             args.name = datetime.now().strftime('%Y-%m-%d_%H:%M')
-
+            args.name = args.name + '_' + args.dataset_name
     if args.work_type == 'train':
         train(args)
     elif args.work_type == 'test':
