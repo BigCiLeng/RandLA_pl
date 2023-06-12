@@ -5,6 +5,7 @@ from pathlib import Path
 from plyfile import PlyData
 import pickle, time, warnings
 import numpy as np
+import re
 
 # from utils.tools import Config as cfg
 from utils.tools import DataProcessing as DP
@@ -109,7 +110,7 @@ class CloudsDataset(Dataset):
         self.input_names = {'training': [], 'validation': []}
         self.val_proj = []
         self.val_labels = []
-        self.val_split = 'untermaederbrunnen_station3_xyz_intensity_rgb'
+        self.val_split = 'Area_6'
 
         self.load_data()
         print('Size of training : ', len(self.input_colors['training']))
@@ -119,7 +120,7 @@ class CloudsDataset(Dataset):
         for i, file_path in enumerate(self.paths):
             t0 = time.time()
             cloud_name = file_path.stem
-            if self.val_split in cloud_name:
+            if re.match(self.val_split, cloud_name):
                 cloud_split = 'validation'
             else:
                 cloud_split = 'training'
@@ -134,7 +135,7 @@ class CloudsDataset(Dataset):
                 with open(sub_file, 'rb') as f:
                     plydata = PlyData.read(f)
                 plydata = plydata['vertex'].data.copy()
-                data = np.array(plydata, dtype = 'float32')
+                data = np.array(plydata)
             else:
                 raise Exception("Invalid data_type!")
             sub_colors = data[:,3:6]
@@ -300,7 +301,7 @@ def data_loaders(dir, hparams, sampling_method='active_learning', **kwargs):
     # raise ValueError(f"Dataset sampling method '{sampling_method}' does not exist.")
 
 if __name__ == '__main__':
-    dataset = CloudsDataset(Path('/share/dataset/sqn_own/semantic3d/train'))
+    dataset = CloudsDataset(Path('/share/dataset/sqn_own/S3DIS/train'))
     batch_sampler = ActiveLearningSampler(dataset)
     for data in batch_sampler:
         xyz, colors, labels, idx, cloud_idx = data

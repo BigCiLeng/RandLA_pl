@@ -11,7 +11,7 @@ sys.path.append(ROOT_DIR)
 from utils.ply import write_ply
 from utils.tools import DataProcessing as DP
 
-grid_size = 0.06
+grid_size = 0.04
 dataset_path = '/share/dataset/sqn_own/semantic3d/original_data'
 original_pc_folder = join(dirname(dataset_path), 'original_ply')
 sub_pc_folder = join(dirname(dataset_path), 'input_{:.3f}'.format(grid_size))

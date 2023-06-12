@@ -1,63 +1,81 @@
-from collections import defaultdict
-import json
+from sklearn.neighbors import KDTree
+from os.path import join, exists, dirname, abspath
 import numpy as np
-from pathlib import Path
-import warnings
-
-ROOT_PATH = (Path(__file__) / '..' / '..').resolve()
-DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis'
-RAW_PATH = DATASET_PATH / 'Stanford3dDataset_v1.2'
-LABELS_PATH = DATASET_PATH / 'classes.json'
-TRAIN_PATH = DATASET_PATH / 'train'
-TEST_PATH = DATASET_PATH / 'test'
-VAL_PATH = DATASET_PATH / 'val'
-
-for folder in [TRAIN_PATH, TEST_PATH, VAL_PATH]:
-    folder.mkdir(exist_ok=True)
+import os, glob, pickle
+import sys
+import pandas as pd
+BASE_DIR = dirname(abspath(__file__))
+ROOT_DIR = dirname(BASE_DIR)
+sys.path.append(BASE_DIR)
+sys.path.append(ROOT_DIR)
+from utils.ply import write_ply
+from utils.tools import DataProcessing as DP
 
 
-if LABELS_PATH.exists():
-    print(LABELS_PATH)
-    with open(LABELS_PATH, 'r') as f:
-        labels_dict = defaultdict(lambda: len(labels_dict.keys()), json.load(f))
-else:
-    labels_dict = defaultdict(lambda: len(labels_dict.keys()))
+dataset_path = '/share/dataset/sqn_own/S3DIS/Stanford3dDataset_v1.2_Aligned_Version'
+anno_paths = [line.rstrip() for line in open(join(BASE_DIR, 's3dis_meta/anno_paths.txt'))]
+anno_paths = [join(dataset_path, p) for p in anno_paths]
 
-for area_number in range(1,7):
-    print(f'Reencoding point clouds of area {area_number:d}')
-    dir = RAW_PATH / f'Area_{area_number:d}'
-    if not dir.exists():
-        warnings.warn(f'Area {area_number:d} not found')
-        continue
-    for pc_path in sorted(list(dir.iterdir())):
-        if not pc_path.is_dir:
-            continue
-        pc_name = f'{area_number:d}_' + pc_path.stem + '.npy'
+gt_class = [x.rstrip() for x in open(join(BASE_DIR, 's3dis_meta/class_names.txt'))]
+gt_class2label = {cls: i for i, cls in enumerate(gt_class)}
 
-        # chack that the point cloud has not been traeated yet
-        if list(ROOT_PATH.rglob(pc_name)) != []:
-            continue
+sub_grid_size = 0.04
+original_pc_folder = join(dirname(dataset_path), 'original_ply')
+sub_pc_folder = join(dirname(dataset_path), 'input_{:.3f}'.format(sub_grid_size))
+os.mkdir(original_pc_folder) if not exists(original_pc_folder) else None
+os.mkdir(sub_pc_folder) if not exists(sub_pc_folder) else None
+out_format = '.ply'
 
-        points_list = []
-        for elem in sorted(list(pc_path.glob('Annotations/*.txt'))):
-            label = elem.stem.split('_')[0]
-            print(f'Computation of {pc_name}: adding {label} to point cloud...          ', end='\r')
-            points = np.loadtxt(elem, dtype=np.float32)
-            label_id = labels_dict[label]
-            labelled_points = np.vstack((points.T, np.full(points.shape[0], label_id))).T
-            points_list.append(labelled_points.astype(np.float32))
 
-        if points_list == []:
-            continue
-        # save dict as json
-        with open(LABELS_PATH, 'w') as f:
-            json.dump(labels_dict, f, indent=2)
+def convert_pc2ply(anno_path, save_path):
+    """
+    Convert original dataset files to ply file (each line is XYZRGBL).
+    We aggregated all the points from each instance in the room.
+    :param anno_path: path to annotations. e.g. Area_1/office_2/Annotations/
+    :param save_path: path to save original point clouds (each line is XYZRGBL)
+    :return: None
+    """
+    data_list = []
 
-        # merge all subclouds together
-        merged_points = np.vstack(points_list)
+    for f in glob.glob(join(anno_path, '*.txt')):
+        class_name = os.path.basename(f).split('_')[0]
+        if class_name not in gt_class:  # note: in some room there is 'staris' class..
+            class_name = 'clutter'
+        pc = pd.read_csv(f, header=None, delim_whitespace=True).values
+        labels = np.ones((pc.shape[0], 1)) * gt_class2label[class_name]
+        data_list.append(np.concatenate([pc, labels], 1))  # Nx7
 
-        # save computed point cloud
-        path = TRAIN_PATH if area_number < 5 else TEST_PATH
-        np.save(path / pc_name, merged_points, allow_pickle=False)
+    pc_label = np.concatenate(data_list, 0)
+    xyz_min = np.amin(pc_label, axis=0)[0:3]
+    pc_label[:, 0:3] -= xyz_min
 
-print('Done.')
+    xyz = pc_label[:, :3].astype(np.float32)
+    colors = pc_label[:, 3:6].astype(np.uint8)
+    labels = pc_label[:, 6].astype(np.uint8)
+    write_ply(save_path, (xyz, colors, labels), ['x', 'y', 'z', 'red', 'green', 'blue', 'class'])
+
+    # save sub_cloud and KDTree file
+    sub_xyz, sub_colors, sub_labels = DP.grid_sub_sampling(xyz, colors, labels, sub_grid_size)
+    sub_colors = sub_colors / 255.0
+    sub_ply_file = join(sub_pc_folder, save_path.split('/')[-1][:-4] + '.ply')
+    write_ply(sub_ply_file, [sub_xyz, sub_colors, sub_labels], ['x', 'y', 'z', 'red', 'green', 'blue', 'class'])
+
+    search_tree = KDTree(sub_xyz)
+    kd_tree_file = join(sub_pc_folder, str(save_path.split('/')[-1][:-4]) + '_KDTree.pkl')
+    with open(kd_tree_file, 'wb') as f:
+        pickle.dump(search_tree, f)
+
+    proj_idx = np.squeeze(search_tree.query(xyz, return_distance=False))
+    proj_idx = proj_idx.astype(np.int32)
+    proj_save = join(sub_pc_folder, str(save_path.split('/')[-1][:-4]) + '_proj.pkl')
+    with open(proj_save, 'wb') as f:
+        pickle.dump([proj_idx, labels], f)
+
+
+if __name__ == '__main__':
+    # Note: there is an extra character in the v1.2 data in Area_5/hallway_6. It's fixed manually.
+    for annotation_path in anno_paths:
+        print(annotation_path)
+        elements = str(annotation_path).split('/')
+        out_file_name = elements[-3] + '_' + elements[-2] + out_format
+        convert_pc2ply(annotation_path, join(original_pc_folder, out_file_name))
