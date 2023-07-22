@@ -6,15 +6,15 @@ This repository contains a PyTorch-lightning implementation of [RandLA-Net](http
 
 1. Clone this repository
 
-   ```sh
-   git clone https://github.com/aRI0U/RandLA-Net-pytorch.git
-   ```
+```sh
+git clone https://github.com/aRI0U/RandLA-Net-pytorch.git
+```
 
 2. Install all Python dependencies
 
-  ```sh
-    pip install -r requirements
-  ```
+```sh
+pip install -r requirements
+```
 
 ***Common issue***: *the setup file from `torch-points-kernels` package needs PyTorch to be previously installed. You may thus need to install PyTorch first and then torch-points-kernels.*
 
@@ -22,38 +22,38 @@ This repository contains a PyTorch-lightning implementation of [RandLA-Net](http
 
   To setup Semantic3D:
 
-   ```sh
-   cd RandLA-Net-pytorch/utils
-   ./download_semantic3d.sh
-   python3 prepare_semantic3d.py # Very slow operation
-   ```
+```sh
+cd RandLA-Net-pytorch/utils
+./download_semantic3d.sh
+python3 prepare_semantic3d.py # Very slow operation
+```
 
    To setup SDIS, register and then download the `zip` archive containing the files [here](http://buildingparser.stanford.edu/dataset.html#Download). We used the archive which contains only the 3D point clouds with ground truth annotations.
 
    Assuming that the archive is located in folder `RandLA-Net-pytorch/datasets`, then run:
 
-   ```sh
-   cd RandLA-Net-pytorch/utils
-   python3 prepare_s3dis.py
-   ```
+```sh
+cd RandLA-Net-pytorch/utils
+python3 prepare_s3dis.py
+```
 
 5. Finally, in order to subsample the point clouds using a grid subsampling, run:
-  ```sh
-  cd RandLA-Net-pytorch/utils/cpp_wrappers
-  ./compile_wrappers.sh   # you might need to chmod +x before
-  cd ..
-  python3 subsample_data.py
-  ```
+```sh
+cd RandLA-Net-pytorch/utils/cpp_wrappers
+./compile_wrappers.sh   # you might need to chmod +x before
+cd ..
+python3 subsample_data.py
+```
 
 
 ## Usage
 
 - Train a model
 
-  ```sh
-  cd scripts/
-  sh train_xxx.sh
-  ```
+```sh
+cd scripts/
+sh train_xxx.sh
+```
 
 ### Visualization
 
@@ -66,16 +66,16 @@ This work implements the work presented in [RandLA-Net: Efficient Semantic Segme
 The original implementation (in TensorFlow 1) can be found [here](https://github.com/QingyongHu/RandLA-Net).
 
 To cite the original paper:
-  ```
-  @article{RandLA-Net,
-    arxivId = {1911.11236},
-    author = {Hu, Qingyong and Yang, Bo and Xie, Linhai and Rosa, Stefano and Guo, Yulan and Wang, Zhihua and Trigoni, Niki and Markham, Andrew},
-    eprint = {1911.11236},
-    title = {{RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds}},
-    url = {http://arxiv.org/abs/1911.11236},
-    year = {2019}
-  }
-  ```
+```
+@article{RandLA-Net,
+ arxivId = {1911.11236},
+ author = {Hu, Qingyong and Yang, Bo and Xie, Linhai and Rosa, Stefano and Guo, Yulan and Wang, Zhihua and Trigoni, Niki and Markham, Andrew},
+ eprint = {1911.11236},
+ title = {{RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds}},
+ url = {http://arxiv.org/abs/1911.11236},
+ year = {2019}
+}
+```
 <!--
 
 ## Warning
