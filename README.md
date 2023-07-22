@@ -7,7 +7,7 @@ This repository contains a PyTorch-lightning implementation of [RandLA-Net](http
 1. Clone this repository
 
 ```sh
-git clone https://github.com/aRI0U/RandLA-Net-pytorch.git
+https://github.com/BigCiLeng/RandLA_pl.git
 ```
 
 2. Install all Python dependencies
@@ -64,6 +64,8 @@ One can visualize the evolution of the loss with Wandb.
 This work implements the work presented in [RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds](http://arxiv.org/abs/1911.11236).
 
 The original implementation (in TensorFlow 1) can be found [here](https://github.com/QingyongHu/RandLA-Net).
+
+The Pytorch implementation [aRI0U/RandLA-Net-pytorch](https://github.com/aRI0U/RandLA-Net-pytorch).
 
 To cite the original paper:
 ```
